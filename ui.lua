@@ -3,6 +3,7 @@ local Library = {}
 -- Сервисы
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
 
 -- Функция для создания главного окна
 function Library:CreateWindow(config)
@@ -166,8 +167,19 @@ function Library:CreateWindow(config)
     -- Объект окна
     local Window = {
         Tabs = {},
-        CurrentTab = nil
+        CurrentTab = nil,
+        ScreenGui = ScreenGui
     }
+    
+    -- Функция для уничтожения окна
+    function Window:Destroy()
+        ScreenGui:Destroy()
+    end
+    
+    -- Функция для скрытия/показа окна
+    function Window:ToggleVisibility()
+        ScreenGui.Enabled = not ScreenGui.Enabled
+    end
     
     -- Создание вкладки
     function Window:CreateTab(tabName)
@@ -206,6 +218,11 @@ function Library:CreateWindow(config)
         ContentPadding.PaddingLeft = UDim.new(0, 5)
         ContentPadding.PaddingRight = UDim.new(0, 5)
         ContentPadding.Parent = TabContent
+        
+        -- Обновление размера скролла
+        ContentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+            TabContent.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 10)
+        end)
         
         TabButton.MouseButton1Click:Connect(function()
             for _, tab in pairs(Window.Tabs) do
@@ -328,7 +345,18 @@ function Library:CreateWindow(config)
                 callback(toggled)
             end)
             
-            return ToggleFrame
+            return {
+                Frame = ToggleFrame,
+                Set = function(value)
+                    toggled = value
+                    ToggleButton.BackgroundColor3 = toggled and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(100, 100, 100)
+                    ToggleCircle.Position = toggled and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+                    callback(toggled)
+                end,
+                Get = function()
+                    return toggled
+                end
+            }
         end
         
         -- Slider
@@ -398,6 +426,16 @@ function Library:CreateWindow(config)
             SliderButton.Parent = SliderBar
             
             local dragging = false
+            local currentValue = default
+            
+            local function updateValue(value)
+                value = math.floor(value)
+                currentValue = value
+                SliderValue.Text = tostring(value)
+                local percent = (value - min) / (max - min)
+                SliderFill.Size = UDim2.new(percent, 0, 1, 0)
+                callback(value)
+            end
             
             SliderButton.MouseButton1Down:Connect(function()
                 dragging = true
@@ -418,13 +456,19 @@ function Library:CreateWindow(config)
                     local percent = relative / barSize
                     local value = math.floor(min + (max - min) * percent)
                     
-                    SliderFill.Size = UDim2.new(percent, 0, 1, 0)
-                    SliderValue.Text = tostring(value)
-                    callback(value)
+                    updateValue(value)
                 end
             end)
             
-            return SliderFrame
+            return {
+                Frame = SliderFrame,
+                Set = function(value)
+                    updateValue(math.clamp(value, min, max))
+                end,
+                Get = function()
+                    return currentValue
+                end
+            }
         end
         
         -- Dropdown
@@ -482,6 +526,7 @@ function Library:CreateWindow(config)
             OptionsList.Parent = OptionsFrame
             
             local isOpen = false
+            local currentOption = default
             
             for _, option in ipairs(options) do
                 local OptionButton = Instance.new("TextButton")
@@ -503,6 +548,7 @@ function Library:CreateWindow(config)
                 end)
                 
                 OptionButton.MouseButton1Click:Connect(function()
+                    currentOption = option
                     DropdownLabel.Text = dropdownText .. ": " .. option
                     callback(option)
                     
@@ -540,7 +586,19 @@ function Library:CreateWindow(config)
                 end
             end)
             
-            return DropdownFrame
+            return {
+                Frame = DropdownFrame,
+                Set = function(option)
+                    if table.find(options, option) then
+                        currentOption = option
+                        DropdownLabel.Text = dropdownText .. ": " .. option
+                        callback(option)
+                    end
+                end,
+                Get = function()
+                    return currentOption
+                end
+            }
         end
         
         -- Textbox
@@ -593,7 +651,15 @@ function Library:CreateWindow(config)
                 end
             end)
             
-            return TextboxFrame
+            return {
+                Frame = TextboxFrame,
+                Set = function(text)
+                    Textbox.Text = text
+                end,
+                Get = function()
+                    return Textbox.Text
+                end
+            }
         end
         
         -- Label
@@ -612,6 +678,21 @@ function Library:CreateWindow(config)
             return Label
         end
         
-        -- Обновление размера скролла
-        ContentList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-            TabContent.CanvasSize = UDim2.new(0, 0, 0, ContentList.AbsoluteContentSize.Y + 10)
+        -- Separator
+        function Tab:CreateSeparator()
+            local Separator = Instance.new("Frame")
+            Separator.Size = UDim2.new(1, -10, 0, 1)
+            Separator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            Separator.BorderSizePixel = 0
+            Separator.Parent = TabContent
+            
+            return Separator
+        end
+        
+        return Tab
+    end
+    
+    return Window
+end
+
+return Library          
